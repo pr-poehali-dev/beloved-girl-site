@@ -7,25 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
-const BACKEND_URL = 'https://functions.poehali.dev/8e03396d-88a5-458d-9168-a2537392228e';
-
-const wishes = [
-  {
-    icon: 'Heart',
-    title: 'Моя любовь',
-    text: 'Ты — самое дорогое, что есть в моей жизни. Каждый день с тобой — это подарок.'
-  },
-  {
-    icon: 'Star',
-    title: 'Моя мечта',
-    text: 'Мечтаю о том, чтобы мы всегда были вместе, преодолевая любые препятствия рука об руку.'
-  },
-  {
-    icon: 'Sparkles',
-    title: 'Наше будущее',
-    text: 'Впереди нас ждёт столько прекрасных моментов: путешествия, дом нашей мечты и вечера у камина.'
-  }
-];
+const PHOTOS_URL = 'https://functions.poehali.dev/8e03396d-88a5-458d-9168-a2537392228e';
+const TEXTS_URL = 'https://functions.poehali.dev/977b9359-e4cf-40b2-969a-f2ddc57365c4';
 
 interface Memory {
   id: number;
@@ -40,6 +23,9 @@ export default function Index() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingText, setEditingText] = useState<{ key: string; value: string } | null>(null);
+  const [texts, setTexts] = useState<Record<string, string>>({});
   const [newMemory, setNewMemory] = useState({
     title: '',
     date: '',
@@ -50,11 +36,12 @@ export default function Index() {
 
   useEffect(() => {
     fetchMemories();
+    fetchTexts();
   }, []);
 
   const fetchMemories = async () => {
     try {
-      const response = await fetch(BACKEND_URL);
+      const response = await fetch(PHOTOS_URL);
       const data = await response.json();
       setMemories(data.memories || []);
     } catch (error) {
@@ -63,6 +50,16 @@ export default function Index() {
         description: 'Не удалось загрузить фотографии',
         variant: 'destructive'
       });
+    }
+  };
+
+  const fetchTexts = async () => {
+    try {
+      const response = await fetch(TEXTS_URL);
+      const data = await response.json();
+      setTexts(data.texts || {});
+    } catch (error) {
+      console.error('Failed to fetch texts:', error);
     }
   };
 
@@ -92,7 +89,7 @@ export default function Index() {
     setIsUploading(true);
 
     try {
-      const response = await fetch(BACKEND_URL, {
+      const response = await fetch(PHOTOS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMemory)
@@ -118,8 +115,73 @@ export default function Index() {
     }
   };
 
+  const handleTextEdit = (key: string, currentValue: string) => {
+    setEditingText({ key, value: currentValue });
+  };
+
+  const handleTextSave = async () => {
+    if (!editingText) return;
+
+    try {
+      const response = await fetch(TEXTS_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingText)
+      });
+
+      if (response.ok) {
+        setTexts(prev => ({ ...prev, [editingText.key]: editingText.value }));
+        toast({
+          title: 'Сохранено!',
+          description: 'Текст успешно обновлён'
+        });
+        setEditingText(null);
+      }
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось сохранить изменения',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const EditableText = ({ textKey, className, isTitle = false }: { textKey: string; className?: string; isTitle?: boolean }) => {
+    const Component = isTitle ? 'h1' : 'p';
+    const value = texts[textKey] || '';
+
+    if (!isEditMode) {
+      return <Component className={className}>{value}</Component>;
+    }
+
+    return (
+      <div className="relative group">
+        <Component className={className}>{value}</Component>
+        <Button
+          size="sm"
+          variant="outline"
+          className="absolute -right-12 top-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => handleTextEdit(textKey, value)}
+        >
+          <Icon name="Edit" size={16} />
+        </Button>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-accent via-background to-secondary overflow-x-hidden">
+      <div className="fixed top-4 right-4 z-50 flex gap-2">
+        <Button
+          variant={isEditMode ? 'default' : 'outline'}
+          onClick={() => setIsEditMode(!isEditMode)}
+          className="gap-2"
+        >
+          <Icon name={isEditMode ? 'Check' : 'Edit'} size={16} />
+          {isEditMode ? 'Готово' : 'Редактировать'}
+        </Button>
+      </div>
+
       <div 
         className="absolute top-10 left-10 text-primary animate-float opacity-20"
         style={{ fontSize: '4rem' }}
@@ -141,12 +203,15 @@ export default function Index() {
 
       <section className="relative py-20 px-4 text-center">
         <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
-          <h1 className="text-6xl md:text-8xl font-bold text-primary mb-4">
-            Моей единственной
-          </h1>
-          <p className="text-2xl md:text-3xl text-foreground/80 font-light">
-            Этот сайт создан специально для тебя
-          </p>
+          <EditableText
+            textKey="hero_title"
+            className="text-6xl md:text-8xl font-bold text-primary mb-4"
+            isTitle
+          />
+          <EditableText
+            textKey="hero_subtitle"
+            className="text-2xl md:text-3xl text-foreground/80 font-light"
+          />
           <div className="flex justify-center gap-2 text-4xl mt-8">
             <span className="animate-float">💝</span>
             <span className="animate-float" style={{ animationDelay: '0.5s' }}>🌸</span>
@@ -266,19 +331,25 @@ export default function Index() {
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {wishes.map((wish, index) => (
+            {[1, 2, 3].map((num, index) => (
               <Card
-                key={index}
+                key={num}
                 className="p-8 text-center border-2 border-primary/20 hover:border-primary/60 transition-all duration-500 bg-card/80 backdrop-blur animate-scale-in hover:shadow-2xl"
                 style={{ animationDelay: `${index * 0.2}s` }}
               >
                 <div className="flex justify-center mb-6">
                   <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                    <Icon name={wish.icon as any} size={40} className="text-primary" />
+                    <Icon name={num === 1 ? 'Heart' : num === 2 ? 'Star' : 'Sparkles'} size={40} className="text-primary" />
                   </div>
                 </div>
-                <h3 className="text-3xl font-semibold text-primary mb-4">{wish.title}</h3>
-                <p className="text-lg text-foreground/70 leading-relaxed">{wish.text}</p>
+                <EditableText
+                  textKey={`wishes_${num}_title`}
+                  className="text-3xl font-semibold text-primary mb-4"
+                />
+                <EditableText
+                  textKey={`wishes_${num}_text`}
+                  className="text-lg text-foreground/70 leading-relaxed"
+                />
               </Card>
             ))}
           </div>
@@ -288,9 +359,10 @@ export default function Index() {
       <section className="py-16 px-4 bg-primary/5">
         <div className="max-w-4xl mx-auto text-center space-y-8 animate-fade-in">
           <div className="space-y-4">
-            <h2 className="text-5xl md:text-6xl font-bold text-primary">
-              Наши планы на будущее
-            </h2>
+            <EditableText
+              textKey="future_title"
+              className="text-5xl md:text-6xl font-bold text-primary"
+            />
             <div className="flex justify-center gap-3 text-3xl">
               <span>🏡</span>
               <span>✈️</span>
@@ -301,35 +373,21 @@ export default function Index() {
           
           <Card className="p-10 bg-card/90 backdrop-blur border-2 border-primary/20 shadow-xl">
             <div className="space-y-6 text-left">
-              <div className="flex items-start gap-4">
-                <Icon name="Home" size={32} className="text-primary mt-1" />
-                <div>
-                  <h3 className="text-2xl font-semibold text-primary mb-2">Наш дом</h3>
-                  <p className="text-lg text-foreground/70">
-                    Мечтаю о доме, где каждое утро мы будем просыпаться вместе, а вечера проводить у камина.
-                  </p>
+              {[1, 2, 3].map((num) => (
+                <div key={num} className="flex items-start gap-4">
+                  <Icon name={num === 1 ? 'Home' : num === 2 ? 'Plane' : 'Heart'} size={32} className="text-primary mt-1" />
+                  <div>
+                    <EditableText
+                      textKey={`future_${num}_title`}
+                      className="text-2xl font-semibold text-primary mb-2"
+                    />
+                    <EditableText
+                      textKey={`future_${num}_text`}
+                      className="text-lg text-foreground/70"
+                    />
+                  </div>
                 </div>
-              </div>
-              
-              <div className="flex items-start gap-4">
-                <Icon name="Plane" size={32} className="text-primary mt-1" />
-                <div>
-                  <h3 className="text-2xl font-semibold text-primary mb-2">Путешествия</h3>
-                  <p className="text-lg text-foreground/70">
-                    Хочу показать тебе весь мир: от романтичного Парижа до тёплых пляжей Бали.
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-4">
-                <Icon name="Heart" size={32} className="text-primary mt-1" />
-                <div>
-                  <h3 className="text-2xl font-semibold text-primary mb-2">Вместе навсегда</h3>
-                  <p className="text-lg text-foreground/70">
-                    Главное — это быть рядом с тобой каждый день, радоваться мелочам и поддерживать друг друга.
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </Card>
         </div>
@@ -342,14 +400,35 @@ export default function Index() {
             <span className="animate-float" style={{ animationDelay: '0.7s' }}>💖</span>
             <span className="animate-float" style={{ animationDelay: '1.4s' }}>💝</span>
           </div>
-          <p className="text-3xl font-semibold text-primary">
-            С любовью, только для тебя
-          </p>
-          <p className="text-xl text-foreground/60">
-            Каждый день — это новая страница нашей истории
-          </p>
+          <EditableText
+            textKey="footer_title"
+            className="text-3xl font-semibold text-primary"
+          />
+          <EditableText
+            textKey="footer_subtitle"
+            className="text-xl text-foreground/60"
+          />
         </div>
       </footer>
+
+      <Dialog open={!!editingText} onOpenChange={() => setEditingText(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактировать текст</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={editingText?.value || ''}
+              onChange={(e) => setEditingText(prev => prev ? { ...prev, value: e.target.value } : null)}
+              rows={4}
+            />
+            <div className="flex gap-2">
+              <Button onClick={handleTextSave} className="flex-1">Сохранить</Button>
+              <Button variant="outline" onClick={() => setEditingText(null)} className="flex-1">Отмена</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

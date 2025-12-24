@@ -1,0 +1,20 @@
+{
+  "tests": [
+    {
+      "name": "Get all texts",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Update text",
+      "method": "PUT",
+      "path": "/",
+      "body": {
+        "key": "hero_title",
+        "value": "Моей любимой"
+      },
+      "expectedStatus": 200
+    }
+  ]
+}
