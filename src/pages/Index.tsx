@@ -1,31 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 import Icon from '@/components/ui/icon';
 
-const memories = [
-  {
-    id: 1,
-    image: 'https://cdn.poehali.dev/projects/65e1ab89-a927-4ad2-81f8-4d9ab5114284/files/7f2fe552-1e02-41da-9c6a-c578c196a026.jpg',
-    title: 'Наша первая встреча',
-    date: 'Весна 2024',
-    description: 'Тот день, когда всё изменилось'
-  },
-  {
-    id: 2,
-    image: 'https://cdn.poehali.dev/projects/65e1ab89-a927-4ad2-81f8-4d9ab5114284/files/bfad4677-86b2-4c39-b3d7-2ab158c56255.jpg',
-    title: 'Вечер при свечах',
-    date: 'Лето 2024',
-    description: 'Самый романтичный ужин'
-  },
-  {
-    id: 3,
-    image: 'https://cdn.poehali.dev/projects/65e1ab89-a927-4ad2-81f8-4d9ab5114284/files/72586625-3305-4f71-8aa5-4758f18df20a.jpg',
-    title: 'Первый букет',
-    date: 'Осень 2024',
-    description: 'Цветы, которые заставили тебя улыбнуться'
-  }
-];
+const BACKEND_URL = 'https://functions.poehali.dev/8e03396d-88a5-458d-9168-a2537392228e';
 
 const wishes = [
   {
@@ -45,8 +27,96 @@ const wishes = [
   }
 ];
 
+interface Memory {
+  id: number;
+  title: string;
+  date: string;
+  description: string;
+  image_url: string;
+}
+
 export default function Index() {
   const [selectedMemory, setSelectedMemory] = useState<number | null>(null);
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [newMemory, setNewMemory] = useState({
+    title: '',
+    date: '',
+    description: '',
+    image: ''
+  });
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchMemories();
+  }, []);
+
+  const fetchMemories = async () => {
+    try {
+      const response = await fetch(BACKEND_URL);
+      const data = await response.json();
+      setMemories(data.memories || []);
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось загрузить фотографии',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewMemory(prev => ({ ...prev, image: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newMemory.title || !newMemory.date || !newMemory.image) {
+      toast({
+        title: 'Ошибка',
+        description: 'Заполните все обязательные поля',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMemory)
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Успешно!',
+          description: 'Фотография добавлена в галерею'
+        });
+        setIsDialogOpen(false);
+        setNewMemory({ title: '', date: '', description: '', image: '' });
+        await fetchMemories();
+      }
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось загрузить фотографию',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-accent via-background to-secondary overflow-x-hidden">
@@ -87,9 +157,73 @@ export default function Index() {
 
       <section className="py-16 px-4">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-5xl md:text-6xl font-bold text-center text-primary mb-12 animate-fade-in">
-            Наши памятные моменты
-          </h2>
+          <div className="flex justify-between items-center mb-12">
+            <h2 className="text-5xl md:text-6xl font-bold text-primary animate-fade-in">
+              Наши памятные моменты
+            </h2>
+            
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="lg" className="gap-2 animate-scale-in">
+                  <Icon name="Plus" size={20} />
+                  Добавить фото
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl text-primary">Добавить памятный момент</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Название *</label>
+                    <Input
+                      value={newMemory.title}
+                      onChange={(e) => setNewMemory(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Например: Первая встреча"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Дата *</label>
+                    <Input
+                      value={newMemory.date}
+                      onChange={(e) => setNewMemory(prev => ({ ...prev, date: e.target.value }))}
+                      placeholder="Например: Весна 2024"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Описание</label>
+                    <Textarea
+                      value={newMemory.description}
+                      onChange={(e) => setNewMemory(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Опишите этот момент..."
+                      rows={3}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Фотография *</label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      required
+                    />
+                    {newMemory.image && (
+                      <img src={newMemory.image} alt="Preview" className="mt-2 w-full h-40 object-cover rounded-lg" />
+                    )}
+                  </div>
+                  
+                  <Button type="submit" className="w-full" disabled={isUploading}>
+                    {isUploading ? 'Загрузка...' : 'Добавить'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {memories.map((memory, index) => (
@@ -101,7 +235,7 @@ export default function Index() {
               >
                 <div className="relative overflow-hidden aspect-square">
                   <img
-                    src={memory.image}
+                    src={memory.image_url}
                     alt={memory.title}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />
